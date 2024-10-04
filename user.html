@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Área do Usuário</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #videoList { margin-top: 20px; }
+        .videoItem { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Bem-vindo, <span id="userName"></span></h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="video" accept="video/*" required>
+        <input type="text" name="description" placeholder="Descrição do vídeo" required>
+        <button type="submit">Enviar Vídeo</button>
+    </form>
+    <h2>Meus Vídeos</h2>
+    <div id="videoList"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const username = localStorage.getItem('username');
+        document.getElementById('userName').innerText = username || 'Usuário';
+
+        const uploadForm = document.getElementById('uploadForm');
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(uploadForm);
+            formData.append('user', username); // Adiciona o usuário ao FormData
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                uploadForm.reset();
+                loadVideos(); // Recarrega os vídeos após o upload
+            });
+        });
+
+        function loadVideos() {
+            fetch('/videos')
+                .then(response => response.json())
+                .then(videos => {
+                    const videoList = document.getElementById('videoList');
+                    videoList.innerHTML = '';
+                    videos.forEach(video => {
+                        if (video.user === username) { // Exibe apenas os vídeos do usuário logado
+                            const videoItem = document.createElement('div');
+                            videoItem.classList.add('videoItem');
+                            videoItem.innerHTML = `
+                                <h4>${video.user}</h4>
+                                <video controls src="${video.videoPath}" width="400"></video>
+                                <p>${video.description}</p>
+                                <h5>Comentários:</h5>
+                                <ul id="comments-${video.videoPath}"></ul>
+                                <input type="text" placeholder="Comentário">
+                                <button onclick="postComment('${video.videoPath}')">Comentar</button>
+                            `;
+                            videoList.appendChild(videoItem);
+                            loadComments(video.videoPath);
+                        }
+                    });
+                });
+        }
+
+        function postComment(videoPath) {
+            const commentInput = document.querySelector(`input[placeholder="Comentário"]`);
+            const comment = commentInput.value;
+            socket.emit('newComment', { videoPath, comment });
+            commentInput.value = ''; // Limpa o campo de comentário
+        }
+
+        function loadComments(videoPath) {
+            fetch('/videos')
+                .then(response => response.json())
+                .then(videos => {
+                    const video = videos.find(v => v.videoPath === videoPath);
+                    const commentsList = document.getElementById(`comments-${videoPath}`);
+                    commentsList.innerHTML = ''; // Limpa a lista de comentários
+                    video.comments.forEach(comment => {
+                        const listItem = document.createElement('li');
+                        listItem.innerText = comment;
+                        commentsList.appendChild(listItem);
+                    });
+                });
+        }
+
+        socket.on('commentPosted', (data) => {
+            loadComments(data.videoPath); // Atualiza a lista de comentários quando um novo comentário é postado
+        });
+
+        // Carrega vídeos na inicialização
+        loadVideos();
+    </script>
+</body>
+</html>

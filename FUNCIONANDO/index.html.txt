@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galeria de Vídeos</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            overflow: hidden; 
+        }
+        #videoContainer { 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            transition: transform 0.5s ease; 
+        }
+        .videoItem { 
+            height: 100vh; 
+            width: 100vw; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            position: relative; 
+        }
+        video { 
+            height: 100%; 
+            width: 100%; 
+            object-fit: cover; 
+        }
+        .description { 
+            color: white; 
+            background-color: rgba(0, 0, 0, 0.7); 
+            padding: 10px; 
+            border-radius: 5px; 
+            position: absolute; 
+            bottom: 10px; 
+            width: calc(100% - 20px);
+            text-align: center;
+        }
+        .comments { 
+            position: fixed; 
+            bottom: 10%; 
+            right: 5%; 
+            display: none; 
+        }
+        .commentBox {
+            position: absolute;
+            bottom: 0;
+            background-color: white;
+            width: calc(100% - 20px);
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .commentButton {
+            position: fixed;
+            bottom: 10%;
+            right: 5%;
+            background-color: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .commentButton:hover {
+            background-color: #ff6b81;
+        }
+    </style>
+</head>
+<body>
+    <div id="videoContainer"></div>
+    <button class="commentButton" onclick="toggleCommentBox()">💬</button>
+    <div class="comments" id="commentsContainer">
+        <div class="commentBox" id="commentBox">
+            <input type="text" placeholder="Seu comentário..." id="commentInput">
+            <button onclick="postComment()">Comentar</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const videoContainer = document.getElementById('videoContainer');
+        let currentVideoIndex = 0;
+        let videos = [];
+
+        // Função para carregar vídeos
+        function loadVideos() {
+            fetch('/videos')
+                .then(response => response.json())
+                .then(data => {
+                    videos = data; // Armazena os vídeos carregados
+                    displayVideo(currentVideoIndex); // Exibe o primeiro vídeo
+                });
+        }
+
+        // Função para exibir o vídeo atual
+        function displayVideo(index) {
+            videoContainer.innerHTML = ''; // Limpa o container de vídeos
+            const videoItem = document.createElement('div');
+            videoItem.classList.add('videoItem');
+            videoItem.innerHTML = `
+                <video controls src="${videos[index].videoPath}" autoplay></video>
+                <div class="description">${videos[index].description}</div>
+            `;
+            videoContainer.appendChild(videoItem);
+            loadComments(videos[index].videoPath); // Carrega comentários do vídeo
+        }
+
+        // Função para alternar a caixa de comentários
+        function toggleCommentBox() {
+            const commentsContainer = document.getElementById('commentsContainer');
+            commentsContainer.style.display = commentsContainer.style.display === 'block' ? 'none' : 'block';
+        }
+
+        // Função para postar comentários
+        function postComment() {
+            const commentInput = document.getElementById('commentInput');
+            const comment = commentInput.value;
+            socket.emit('newComment', { videoPath: videos[currentVideoIndex].videoPath, comment });
+            commentInput.value = ''; // Limpa o campo de comentário
+        }
+
+        // Função para carregar comentários
+        function loadComments(videoPath) {
+            fetch('/videos')
+                .then(response => response.json())
+                .then(videos => {
+                    const video = videos.find(v => v.videoPath === videoPath);
+                    const commentsList = document.getElementById(`comments-${videoPath}`).getElementsByTagName('ul')[0];
+                    commentsList.innerHTML = ''; // Limpa a lista de comentários
+                    video.comments.forEach(comment => {
+                        const listItem = document.createElement('li');
+                        listItem.innerText = comment;
+                        commentsList.appendChild(listItem);
+                    });
+                });
+        }
+
+        socket.on('commentPosted', (data) => {
+            loadComments(data.videoPath); // Atualiza a lista de comentários quando um novo comentário é postado
+        });
+
+        // Detectar deslizamento para passar vídeos
+        let touchStartY = 0;
+        let touchEndY = 0;
+
+        videoContainer.addEventListener('touchstart', (e) => {
+            touchStartY = e.changedTouches[0].screenY;
+        });
+
+        videoContainer.addEventListener('touchend', (e) => {
+            touchEndY = e.changedTouches[0].screenY;
+            handleGesture();
+        });
+
+        function handleGesture() {
+            if (touchEndY < touchStartY) {
+                // Swipe up (próximo vídeo)
+                if (currentVideoIndex < videos.length - 1) {
+                    currentVideoIndex++;
+                    displayVideo(currentVideoIndex);
+                }
+            } else if (touchEndY > touchStartY) {
+                // Swipe down (vídeo anterior)
+                if (currentVideoIndex > 0) {
+                    currentVideoIndex--;
+                    displayVideo(currentVideoIndex);
+                }
+            }
+        }
+
+        // Detectar deslizar com o mouse para PC
+        videoContainer.addEventListener('mousedown', (e) => {
+            touchStartY = e.clientY;
+        });
+
+        videoContainer.addEventListener('mouseup', (e) => {
+            touchEndY = e.clientY;
+            handleMouseGesture();
+        });
+
+        function handleMouseGesture() {
+            if (touchEndY < touchStartY) {
+                // Scroll up (próximo vídeo)
+                if (currentVideoIndex < videos.length - 1) {
+                    currentVideoIndex++;
+                    displayVideo(currentVideoIndex);
+                }
+            } else if (touchEndY > touchStartY) {
+                // Scroll down (vídeo anterior)
+                if (currentVideoIndex > 0) {
+                    currentVideoIndex--;
+                    displayVideo(currentVideoIndex);
+                }
+            }
+        }
+
+        // Carrega vídeos na inicialização
+        loadVideos();
+    </script>
+</body>
+</html>

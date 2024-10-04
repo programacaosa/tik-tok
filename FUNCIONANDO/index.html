@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      width: 80%;
+      margin: auto;
+      overflow: hidden;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    form input, form button {
+      margin: 10px;
+      padding: 10px;
+      width: 100%;
+      max-width: 400px;
+      font-size: 1em;
+    }
+    #videoList {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    video {
+      width: 200px;
+      margin: 10px;
+    }
+    #commentsList {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    #commentsList li {
+      background-color: #ddd;
+      padding: 10px;
+      margin: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Postar Vídeo</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="text" name="user" placeholder="Seu nome" required>
+      <input type="text" name="description" placeholder="Descrição do vídeo" required>
+      <input type="file" name="video" accept="video/*" required>
+      <button type="submit">Enviar</button>
+    </form>
+
+    <h2>Vídeos</h2>
+    <div id="videoList"></div>
+
+    <h2>Comentários</h2>
+    <input type="text" id="commentInput" placeholder="Escreva um comentário...">
+    <button id="sendComment">Enviar</button>
+    <ul id="commentsList"></ul>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    // Função para carregar vídeos do servidor
+    async function loadVideos() {
+      const response = await fetch('/videos');
+      const videos = await response.json();
+      const videoList = document.getElementById('videoList');
+      videoList.innerHTML = '';
+
+      videos.forEach(video => {
+        const videoElement = document.createElement('video');
+        videoElement.src = video.videoPath;
+        videoElement.controls = true;
+        videoList.appendChild(videoElement);
+      });
+    }
+
+    // Carregar vídeos ao iniciar
+    loadVideos();
+
+    // Envio de formulário para upload de vídeo
+    document.getElementById('uploadForm').addEventListener('submit', async function(event) {
+      event.preventDefault();
+
+      const formData = new FormData(this);
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        alert('Vídeo enviado com sucesso!');
+        loadVideos(); // Recarregar vídeos após o upload
+      }
+    });
+
+    // Enviar comentário
+    document.getElementById('sendComment').addEventListener('click', () => {
+      const comment = document.getElementById('commentInput').value;
+      const videoPath = 'uploads/video1.mp4'; // Exemplo, pode ser dinâmico
+
+      socket.emit('newComment', { videoPath, comment });
+    });
+
+    // Atualizar a lista de comentários em tempo real
+    socket.on('commentPosted', (data) => {
+      const commentsList = document.getElementById('commentsList');
+      const li = document.createElement('li');
+      li.textContent = data.comment;
+      commentsList.appendChild(li);
+    });
+  </script>
+</body>
+</html>

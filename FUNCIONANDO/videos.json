@@ -1,0 +1,18 @@
+[
+  {
+    "user": "user1",
+    "videoPath": "uploads/video1.mp4",
+    "description": "Meu primeiro vídeo",
+    "comments": [
+      "Top"
+    ],
+    "likes": 0
+  },
+  {
+    "user": "Azevedo User",
+    "videoPath": "uploads/aa3cf1d802ed285211cbc9ba4764db7b",
+    "description": "Vídeo de teste do sistema",
+    "comments": [],
+    "likes": 0
+  }
+]

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galeria de Vídeos</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #000; /* Fundo escuro para melhor visualização dos vídeos */
+        }
+        #videoContainer { 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            transition: transform 0.5s ease; 
+        }
+        .videoItem { 
+            height: 100vh; 
+            width: 100vw; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            position: relative; 
+        }
+        video { 
+            height: 100%; 
+            width: 100%; 
+            object-fit: cover; 
+        }
+        .description { 
+            color: white; 
+            background-color: rgba(0, 0, 0, 0.7); 
+            padding: 10px; 
+            border-radius: 5px; 
+            position: absolute; 
+            bottom: 10px; 
+            width: calc(100% - 20px);
+            text-align: center;
+        }
+        .controls {
+            position: absolute;
+            top: 10%;
+            right: 5%;
+            display: flex;
+            flex-direction: column; /* Mudança para coluna */
+            align-items: center; /* Centraliza horizontalmente os ícones */
+            z-index: 10;
+            gap: 5px; /* Reduz o espaçamento entre os ícones */
+        }
+        .controlButton {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 24px; /* Reduzir o tamanho dos ícones */
+            color: white;
+            padding: 5px; /* Reduzir o padding dos ícones */
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .controlButton:hover {
+            background-color: rgba(255, 255, 255, 0.2); /* Efeito de hover */
+        }
+        .likes {
+            color: white;
+            font-size: 14px; /* Ajustar tamanho da fonte para curtidas */
+            margin-top: 2px; /* Ajustar margem para o texto de curtidas */
+        }
+        .comments { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            right: 0; 
+            background-color: rgba(255, 255, 255, 0.9); 
+            transition: transform 0.3s ease;
+            transform: translateY(100%);
+            padding: 10px;
+            z-index: 10; /* Para garantir que fique acima do vídeo */
+        }
+        .commentBox {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+        }
+        .commentInput {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-right: 10px;
+        }
+        .commentButton {
+            position: fixed;
+            bottom: 10%;
+            right: 5%;
+            background-color: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .commentButton:hover {
+            background-color: #ff6b81;
+        }
+        .commentsList {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="videoContainer"></div>
+    <button class="commentButton" onclick="toggleCommentBox()">💬</button>
+    <div class="comments" id="commentsContainer">
+        <div class="commentBox" id="commentBox">
+            <input type="text" class="commentInput" placeholder="Seu comentário..." id="commentInput">
+            <button onclick="postComment()">Comentar</button>
+        </div>
+        <ul class="commentsList" id="commentsList"></ul>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const videoContainer = document.getElementById('videoContainer');
+        let currentVideoIndex = 0;
+        let videos = [];
+
+        // Função para carregar vídeos
+        function loadVideos() {
+            fetch('/videos')
+                .then(response => response.json())
+                .then(data => {
+                    videos = data; // Armazena os vídeos carregados
+                    displayVideo(currentVideoIndex); // Exibe o primeiro vídeo
+                });
+        }
+
+        // Função para exibir o vídeo atual
+        function displayVideo(index) {
+            videoContainer.innerHTML = ''; // Limpa o container de vídeos
+            const videoItem = document.createElement('div');
+            videoItem.classList.add('videoItem');
+            videoItem.innerHTML = `
+                <video controls src="${videos[index].videoPath}" autoplay></video>
+                <div class="description">${videos[index].description}</div>
+                <div class="controls">
+                    <button class="controlButton" onclick="likeVideo(${index})">
+                        ❤️
+                    </button>
+                    <span class="likes" id="likesCount${index}">${videos[index].likes || 0}</span>
+                    <button class="controlButton" onclick="shareVideo('${videos[index].videoPath}')">
+                        📤
+                    </button>
+                    <button class="controlButton" onclick="downloadVideo('${videos[index].videoPath}')">
+                        ⬇️
+                    </button>
+                </div>
+            `;
+            videoContainer.appendChild(videoItem);
+            loadComments(); // Carrega comentários do vídeo
+            document.getElementById('commentsContainer').style.transform = 'translateY(100%)'; // Esconde o campo de comentários
+        }
+
+        // Função para curtir vídeo
+        function likeVideo(index) {
+            videos[index].likes = (videos[index].likes || 0) + 1; // Incrementa o número de curtidas
+            document.getElementById(`likesCount${index}`).innerText = videos[index].likes; // Atualiza a contagem na interface
+            socket.emit('likeVideo', { videoPath: videos[index].videoPath, likes: videos[index].likes }); // Envia as curtidas para os outros usuários
+        }
+
+        // Função para compartilhar vídeo
+        function shareVideo(videoPath) {
+            const shareText = `Confira este vídeo: ${videoPath}`;
+            navigator.clipboard.writeText(shareText).then(() => {
+                alert('Link do vídeo copiado para a área de transferência!');
+            }).catch(err => {
+                console.error('Erro ao copiar o link:', err);
+            });
+        }
+
+        // Função para baixar vídeo
+        function downloadVideo(videoPath) {
+            const link = document.createElement('a');
+            link.href = videoPath;
+            link.download = videoPath.split('/').pop(); // Usa o nome do arquivo original
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Função para alternar a caixa de comentários
+        function toggleCommentBox() {
+            const commentsContainer = document.getElementById('commentsContainer');
+            commentsContainer.style.transform = commentsContainer.style.transform === 'translateY(0%)' ? 'translateY(100%)' : 'translateY(0%)';
+        }
+
+        // Função para postar comentários
+        function postComment() {
+            const commentInput = document.getElementById('commentInput');
+            const comment = commentInput.value;
+            if (comment.trim() !== '') {
+                socket.emit('newComment', { videoPath: videos[currentVideoIndex].videoPath, comment });
+                commentInput.value = ''; // Limpa o campo de comentário
+            }
+        }
+
+        // Função para carregar comentários
+        function loadComments() {
+            fetch('/videos')
+                .then(response => response.json())
+                .then(videos => {
+                    const commentsList = document.getElementById('commentsList');
+                    commentsList.innerHTML = ''; // Limpa a lista de comentários
+                    videos.forEach(video => {
+                        if (video.videoPath === videos[currentVideoIndex].videoPath) {
+                            video.comments.forEach(comment => {
+                                const listItem = document.createElement('li');
+                                listItem.innerText = comment;
+                                commentsList.appendChild(listItem);
+                            });
+                        }
+                    });
+                });
+        }
+
+        socket.on('commentPosted', (data) => {
+            loadComments(); // Atualiza a lista de comentários quando um novo comentário é postado
+        });
+
+        socket.on('likeUpdated', (data) => {
+            // Atualiza a contagem de curtidas para todos
+            videos.forEach(video => {
+                if (video.videoPath === data.videoPath) {
+                    video.likes = data.likes;
+                    document.getElementById(`likesCount${videos.indexOf(video)}`).innerText = data.likes;
+                }
+            });
+        });
+
+        // Implementação do deslizamento para vídeos
+        let touchStartY = 0;
+        let touchEndY = 0;
+        videoContainer.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].screenY;
+        });
+        videoContainer.addEventListener('touchend', (e) => {
+            touchEndY = e.changedTouches[0].screenY;
+            handleGesture();
+        });
+
+        function handleGesture() {
+            if (touchStartY > touchEndY + 50) {
+                // deslizar para cima
+                currentVideoIndex = (currentVideoIndex + 1) % videos.length; // Avança para o próximo vídeo
+                displayVideo(currentVideoIndex);
+            } else if (touchStartY + 50 < touchEndY) {
+                // deslizar para baixo
+                currentVideoIndex = (currentVideoIndex - 1 + videos.length) % videos.length; // Volta para o vídeo anterior
+                displayVideo(currentVideoIndex);
+            }
+        }
+
+        loadVideos(); // Carrega os vídeos ao iniciar
+    </script>
+</body>
+</html>
