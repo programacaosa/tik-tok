@@ -1,0 +1,10 @@
+[
+  {
+    "username": "user1",
+    "followers": ["user2", "user3"]
+  },
+  {
+    "username": "user2",
+    "followers": ["user1"]
+  }
+]
